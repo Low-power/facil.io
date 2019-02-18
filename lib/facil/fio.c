@@ -14,6 +14,7 @@ Feel free to copy, use and enjoy according to the license provided.
 #define FIO_INCLUDE_LINKED_LIST
 #include <fio.h>
 
+#include <sys/param.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
@@ -36,19 +37,19 @@ Feel free to copy, use and enjoy according to the license provided.
 
 #include <arpa/inet.h>
 
-/* force poll for testing? */
-#ifndef FIO_ENGINE_POLL
-#define FIO_ENGINE_POLL 0
-#endif
-
 #if !FIO_ENGINE_POLL && !FIO_ENGINE_EPOLL && !FIO_ENGINE_KQUEUE
 #if defined(__linux__)
 #define FIO_ENGINE_EPOLL 1
-#elif defined(__APPLE__) || defined(__unix__)
+#elif defined(__APPLE__) || defined(BSD)
 #define FIO_ENGINE_KQUEUE 1
 #else
 #define FIO_ENGINE_POLL 1
 #endif
+#endif
+
+/* force poll for testing? */
+#ifndef FIO_ENGINE_POLL
+#define FIO_ENGINE_POLL 0
 #endif
 
 #if FIO_ENGINE_EPOLL
@@ -208,7 +209,7 @@ typedef struct {
   /* polling and global lock */
   fio_lock_i lock;
   /* The highest active fd with a protocol object */
-  uint32_t max_protocol_fd;
+  int max_protocol_fd;
   /* timer handler */
   pid_t parent;
 #if FIO_ENGINE_POLL
@@ -276,7 +277,7 @@ Core Connection Data Clearing
 ***************************************************************************** */
 
 /* set the minimal max_protocol_fd */
-static void fio_max_fd_min(uint32_t fd) {
+static void fio_max_fd_min(int fd) {
   if (fio_data->max_protocol_fd > fd)
     return;
   fio_lock(&fio_data->lock);
@@ -2283,7 +2284,11 @@ int fio_set_non_block(int fd) {
   if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
     flags = 0;
   // printf("flags initial value was %d\n", flags);
-  return fcntl(fd, F_SETFL, flags | O_NONBLOCK | O_CLOEXEC);
+  return fcntl(fd, F_SETFL, flags | O_NONBLOCK
+#ifdef O_CLOEXEC
+	| O_CLOEXEC
+#endif
+	);
 #elif defined(FIONBIO)
   /* Otherwise, use the old way of doing it */
   static int flags = 1;
@@ -2557,10 +2562,10 @@ Internal socket flushing related functions
 #if defined(__linux__) /* linux sendfile works  */
 #include <sys/sendfile.h>
 #define USE_SENDFILE 1
-#elif defined(__unix__) /* BSD sendfile should work, but isn't tested */
+#elif defined(__APPLE__) /* Is the apple sendfile still broken? */
 #include <sys/uio.h>
 #define USE_SENDFILE 1
-#elif defined(__APPLE__) /* Is the apple sendfile still broken? */
+#elif defined(BSD) /* BSD sendfile should work, but isn't tested */
 #include <sys/uio.h>
 #define USE_SENDFILE 1
 #else /* sendfile might not be available - always set to 0 */
@@ -2653,7 +2658,7 @@ static int fio_sock_sendfile_from_fd(int fd, fio_packet_s *packet) {
 }
 
 #elif USE_SENDFILE &&                                                          \
-    (defined(__APPLE__) || defined(__unix__)) /* BSD / Apple API */
+    (defined(__APPLE__) || defined(BSD)) /* BSD / Apple API */
 
 static int fio_sock_sendfile_from_fd(int fd, fio_packet_s *packet) {
   off_t act_sent = 0;
@@ -2682,8 +2687,8 @@ error:
 }
 
 #else
-static int (*sock_sendfile_from_fd)(int fd, struct packet_s *packet) =
-    sock_write_from_fd;
+static int (*fio_sock_sendfile_from_fd)(int fd, fio_packet_s *packet) =
+    fio_sock_write_from_fd;
 
 #endif
 
@@ -3010,7 +3015,7 @@ size_t fio_flush_all(void) {
   if (!fio_data)
     return 0;
   size_t count = 0;
-  for (uintptr_t i = 0; i <= fio_data->max_protocol_fd; ++i) {
+  for (int i = 0; i <= fio_data->max_protocol_fd; ++i) {
     if ((fd_data(i).open || fd_data(i).packet) && fio_flush(fd2uuid(i)) > 0)
       ++count;
   }
@@ -3498,7 +3503,7 @@ static void __attribute__((destructor)) fio_lib_destroy(void) {
   fio_free(fio_data);
   /* memory library destruction must be last */
   fio_mem_destroy();
-  FIO_LOG_DEBUG("(%d) facil.io resources released, exit complete.", getpid());
+  FIO_LOG_DEBUG("(%d) facil.io resources released, exit complete.", (int)getpid());
   if (add_eol)
     fprintf(stderr, "\n"); /* add EOL to logs (logging adds EOL before text */
 }
@@ -3727,7 +3732,7 @@ static void fio_worker_startup(void) {
     fio_data->is_worker = 1;
   } else if (fio_data->is_worker) {
     /* Worker Process */
-    FIO_LOG_INFO("%d is running.", getpid());
+    FIO_LOG_INFO("%d is running.", (int)getpid());
   } else {
     /* Root Process should run in single thread mode */
     fio_data->threads = 1;
@@ -3751,18 +3756,18 @@ static void fio_worker_startup(void) {
 static void fio_worker_cleanup(void) {
   /* switch to winding down */
   if (fio_data->is_worker)
-    FIO_LOG_INFO("(%d) detected exit signal.", getpid());
+    FIO_LOG_INFO("(%d) detected exit signal.", (int)getpid());
   else
     FIO_LOG_INFO("Server Detected exit signal.");
   fio_state_callback_force(FIO_CALL_ON_SHUTDOWN);
-  for (size_t i = 0; i <= fio_data->max_protocol_fd; ++i) {
+  for (int i = 0; i <= fio_data->max_protocol_fd; ++i) {
     if (fd_data(i).protocol) {
       fio_defer_push_task(deferred_on_shutdown, (void *)fd2uuid(i), NULL);
     }
   }
   fio_defer_push_task(fio_cycle_unwind, NULL, NULL);
   fio_defer_perform();
-  for (size_t i = 0; i <= fio_data->max_protocol_fd; ++i) {
+  for (int i = 0; i <= fio_data->max_protocol_fd; ++i) {
     if (fd_data(i).protocol || fd_data(i).open) {
       fio_force_close(fd2uuid(i));
     }
@@ -3780,7 +3785,7 @@ static void fio_worker_cleanup(void) {
   if (fio_data->parent == getpid()) {
     FIO_LOG_INFO("   ---  Shutdown Complete  ---\n");
   } else {
-    FIO_LOG_INFO("(%d) cleanup complete.", getpid());
+    FIO_LOG_INFO("(%d) cleanup complete.", (int)getpid());
   }
 }
 
@@ -3814,11 +3819,11 @@ static void *fio_sentinel_worker_thread(void *arg) {
       /* don't call any functions while forking. */
       fio_lock(&fio_fork_lock);
       if (!WIFEXITED(status) || WEXITSTATUS(status)) {
-        FIO_LOG_ERROR("Child worker (%d) crashed. Respawning worker.", child);
+        FIO_LOG_ERROR("Child worker (%d) crashed. Respawning worker.", (int)child);
         fio_state_callback_force(FIO_CALL_ON_CHILD_CRUSH);
       } else {
         FIO_LOG_WARNING("Child worker (%d) shutdown. Respawning worker.",
-                        child);
+                        (int)child);
       }
       fio_defer_push_task(fio_sentinel_task, NULL, NULL);
       fio_unlock(&fio_fork_lock);
@@ -3882,7 +3887,7 @@ void fio_start FIO_IGNORE_MACRO(struct fio_start_args args) {
       "* Press ^C to stop\n",
       fio_data->workers, fio_data->workers > 1 ? "workers" : "worker",
       fio_data->threads, fio_data->threads > 1 ? "threads" : "thread",
-      fio_engine(), fio_data->capa, fio_data->parent);
+      fio_engine(), fio_data->capa, (int)fio_data->parent);
 
   if (args.workers > 1) {
     for (int i = 0; i < args.workers && fio_data->active; ++i) {
@@ -4461,9 +4466,9 @@ static void fio_listen_on_startup(void *pr_) {
   fio_listen_protocol_s *pr = pr_;
   fio_attach(pr->uuid, &pr->pr);
   if (pr->port_len)
-    FIO_LOG_DEBUG("(%d) started listening on port %s", getpid(), pr->port);
+    FIO_LOG_DEBUG("(%d) started listening on port %s", (int)getpid(), pr->port);
   else
-    FIO_LOG_DEBUG("(%d) started listening on Unix Socket at %s", getpid(),
+    FIO_LOG_DEBUG("(%d) started listening on Unix Socket at %s", (int)getpid(),
                   pr->addr);
 }
 
@@ -5802,7 +5807,7 @@ static struct cluster_data_s {
 static void fio_cluster_data_cleanup(int delete_file) {
   if (delete_file && cluster_data.name[0]) {
 #if DEBUG
-    FIO_LOG_DEBUG("(%d) unlinking cluster's Unix socket.", getpid());
+    FIO_LOG_DEBUG("(%d) unlinking cluster's Unix socket.", (int)getpid());
 #endif
     unlink(cluster_data.name);
   }
@@ -5851,7 +5856,7 @@ static void fio_cluster_init(void) {
   tmp_folder_len += 14;
   tmp_folder_len +=
       snprintf(cluster_data.name + tmp_folder_len,
-               FIO_CLUSTER_NAME_LIMIT - tmp_folder_len, "%d", getpid());
+               FIO_CLUSTER_NAME_LIMIT - tmp_folder_len, "%d", (int)getpid());
   cluster_data.name[tmp_folder_len] = 0;
 
   /* remove if existing */
@@ -5896,7 +5901,7 @@ static void fio_cluster_on_data(intptr_t uuid, fio_protocol_s *pr_) {
       if (c->exp_channel) {
         if (c->exp_channel >= (1024 * 1024 * 16) + 1) {
           FIO_LOG_FATAL("(%d) cluster message name too long (16Mb limit): %u\n",
-                        getpid(), (unsigned int)c->exp_channel);
+                        (int)getpid(), (unsigned int)c->exp_channel);
           exit(1);
           return;
         }
@@ -5904,7 +5909,7 @@ static void fio_cluster_on_data(intptr_t uuid, fio_protocol_s *pr_) {
       if (c->exp_msg) {
         if (c->exp_msg >= (1024 * 1024 * 64) + 1) {
           FIO_LOG_FATAL("(%d) cluster message data too long (64Mb limit): %u\n",
-                        getpid(), (unsigned int)c->exp_msg);
+                        (int)getpid(), (unsigned int)c->exp_msg);
           exit(1);
           return;
         }
@@ -5986,7 +5991,7 @@ static void fio_cluster_on_close(intptr_t uuid, fio_protocol_s *pr_) {
   } else if (fio_data->active) {
     /* no shutdown message received - parent crashed. */
     if (c->type != FIO_CLUSTER_MSG_SHUTDOWN && fio_is_running()) {
-      FIO_LOG_FATAL("(%d) Parent Process crash detected!", getpid());
+      FIO_LOG_FATAL("(%d) Parent Process crash detected!", (int)getpid());
       fio_state_callback_force(FIO_CALL_ON_PARENT_CRUSH);
       fio_state_callback_clear(FIO_CALL_ON_PARENT_CRUSH);
       fio_cluster_data_cleanup(1);
@@ -6149,7 +6154,7 @@ static void fio_cluster_listen_on_close(intptr_t uuid,
   cluster_data.uuid = -1;
   if (fio_parent_pid() == getpid()) {
 #if DEBUG
-    FIO_LOG_DEBUG("(%d) stopped listening for cluster connections", getpid());
+    FIO_LOG_DEBUG("(%d) stopped listening for cluster connections", (int)getpid());
 #endif
     if (fio_data->active)
       kill(0, SIGINT);
@@ -6175,7 +6180,7 @@ static void fio_listen2cluster(void *ignore) {
       .ping = mock_ping_eternal,
       .on_close = fio_cluster_listen_on_close,
   };
-  FIO_LOG_DEBUG("(%d) Listening to cluster: %s", getpid(), cluster_data.name);
+  FIO_LOG_DEBUG("(%d) Listening to cluster: %s", (int)getpid(), cluster_data.name);
   fio_attach(cluster_data.uuid, p);
   (void)ignore;
 }
@@ -6307,7 +6312,7 @@ static inline void fio_cluster_inform_root_about_channel(channel_s *ch,
   fio_str_info_s ch_name = {.data = ch->name, .len = ch->name_len};
   fio_str_info_s msg = {.data = NULL, .len = 0};
 #if DEBUG
-  FIO_LOG_DEBUG("(%d) informing root about: %s (%zu) msg type %d", getpid(),
+  FIO_LOG_DEBUG("(%d) informing root about: %s (%zu) msg type %d", (int)getpid(),
                 ch_name.data, ch_name.len,
                 (ch->match ? (add ? FIO_CLUSTER_MSG_PATTERN_SUB
                                   : FIO_CLUSTER_MSG_PATTERN_UNSUB)
@@ -6447,8 +6452,9 @@ static void fio_pubsub_on_fork(void) {
 
 /** Signals children (or self) to shutdown) - NOT signal safe. */
 static void fio_cluster_signal_children(void) {
-  if (fio_parent_pid() != getpid()) {
-    kill(getpid(), SIGINT);
+  pid_t pid = getpid();
+  if (fio_parent_pid() != pid) {
+    kill(pid, SIGINT);
     return;
   }
   fio_cluster_server_sender(fio_msg_internal_create(0, FIO_CLUSTER_MSG_SHUTDOWN,
@@ -9383,7 +9389,7 @@ FIO_FUNC void fio_socket_test(void) {
 #else
   fio_str_write(&sock_name, "/tmp", 4);
 #endif
-  fio_str_printf(&sock_name, "/fio_test_sock-%d.sock", getpid());
+  fio_str_printf(&sock_name, "/fio_test_sock-%d.sock", (int)getpid());
 
   fprintf(stderr, "=== Testing facil.io listening socket creation (partial "
                   "testing only).\n");

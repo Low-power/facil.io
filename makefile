@@ -34,7 +34,7 @@ LINKER_LIBS_EXT=
 # optimization level.
 OPTIMIZATION=-O2 -march=native
 # Warnings... i.e. -Wpedantic -Weverything -Wno-format-pedantic
-WARNINGS= -Wshadow -Wall -Wextra -Wno-missing-field-initializers -Wpedantic
+WARNINGS= -Wshadow -Wall -Wextra -Wno-missing-field-initializers
 # any extra include folders, space seperated list. (i.e. `pg_config --includedir`)
 INCLUDE= ./
 # any preprocessosr defined flags we want, space seperated list (i.e. DEBUG )
@@ -76,21 +76,21 @@ endif
 
 
 # c compiler
-ifndef CC
-	CC=gcc
-endif
+#ifndef CC
+#	CC=gcc
+#endif
 # c++ compiler
-ifndef CPP
-	CPP=g++
-endif
+#ifndef CXX
+#	CXX=g++
+#endif
 
 # c standard
 ifndef CSTD
-	CSTD:=c11
+	CSTD:=gnu99
 endif
 # c++ standard
-ifndef CPPSTD
-	CPPSTD:=gnu++11
+ifndef CXXSTD
+	CXXSTD:=gnu++0x
 endif
 
 
@@ -202,8 +202,8 @@ endif
 
 FLAGS_STR = $(foreach flag,$(FLAGS),$(addprefix -D, $(flag)))
 CFLAGS:= $(CFLAGS) -g -std=$(CSTD) -fpic $(FLAGS_STR) $(WARNINGS) $(OPTIMIZATION) $(INCLUDE_STR)
-CPPFLAGS:= $(CPPFLAGS) -std=$(CPPSTD) -fpic  $(FLAGS_STR) $(WARNINGS) $(OPTIMIZATION) $(INCLUDE_STR)
-LINKER_FLAGS= $(LDFLAGS) $(foreach lib,$(LINKER_LIBS),$(addprefix -l,$(lib))) $(foreach lib,$(LINKER_LIBS_EXT),$(addprefix -l,$(lib)))
+CXXFLAGS:= $(CXXFLAGS) -std=$(CXXSTD) -fpic  $(FLAGS_STR) $(WARNINGS) $(OPTIMIZATION) $(INCLUDE_STR)
+LINKER_FLAGS= $(LDFLAGS) $(foreach lib,$(LINKER_LIBS),$(addprefix -l,$(lib))) $(foreach lib,$(LINKER_LIBS_EXT),$(addprefix -l,$(lib))) $(LIBS)
 CFALGS_DEPENDENCY=-MT $@ -MMD -MP
 
 ########
@@ -214,45 +214,45 @@ $(NAME): build
 build: | create_tree build_objects
 
 build_objects: $(LIB_OBJS) $(MAIN_OBJS)
-	@$(CCL) -o $(BIN) $^ $(OPTIMIZATION) $(LINKER_FLAGS)
-	@$(DOCUMENTATION)
+	$(CCL) -o $(BIN) $^ $(OPTIMIZATION) $(LINKER_FLAGS)
+	$(DOCUMENTATION)
 
 lib: | create_tree lib_build
 
 lib_build: $(LIB_OBJS)
-	@$(CCL) -shared -o $(DESTDIR)/libfacil.so $^ $(OPTIMIZATION) $(LINKER_FLAGS)
-	@$(DOCUMENTATION)
+	$(CCL) -shared -o $(DESTDIR)/libfacil.so $^ $(OPTIMIZATION) $(LINKER_FLAGS)
+	$(DOCUMENTATION)
 
 
 %.o : %.c
 
 ifdef DISAMS
 $(TMP_ROOT)/%.o: %.c $(TMP_ROOT)/%.d
-	@$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CFLAGS)
-	@$(DISAMS) $@ > $@.s
+	$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CFLAGS)
+	$(DISAMS) $@ > $@.s
 
 $(TMP_ROOT)/%.o: %.cpp $(TMP_ROOT)/%.d
-	@$(CPP) -o $@ -c $< $(CFALGS_DEPENDENCY) $(CPPFLAGS)
-	$(eval CCL = $(CPP))
-	@$(DISAMS) $@ > $@.s
+	$(CXX) -o $@ -c $< $(CFALGS_DEPENDENCY) $(CXXFLAGS)
+	$(eval CCL = $(CXX))
+	$(DISAMS) $@ > $@.s
 
 $(TMP_ROOT)/%.o: %.c++ $(TMP_ROOT)/%.d
-	@$(CPP) -o $@ -c $< $(CFALGS_DEPENDENCY) $(CPPFLAGS)
-	$(eval CCL = $(CPP))
-	@$(DISAMS) $@ > $@.s
+	$(CXX) -o $@ -c $< $(CFALGS_DEPENDENCY) $(CXXFLAGS)
+	$(eval CCL = $(CXX))
+	$(DISAMS) $@ > $@.s
 
 
 else
 $(TMP_ROOT)/%.o: %.c $(TMP_ROOT)/%.d
-	@$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CFLAGS)
+	$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CFLAGS)
 
 $(TMP_ROOT)/%.o: %.cpp $(TMP_ROOT)/%.d
-	@$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CPPFLAGS)
-	$(eval CCL = $(CPP))
+	$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CXXFLAGS)
+	$(eval CCL = $(CXX))
 
 $(TMP_ROOT)/%.o: %.c++ $(TMP_ROOT)/%.d
-	@$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CPPFLAGS)
-	$(eval CCL = $(CPP))
+	$(CC) -c $< -o $@ $(CFALGS_DEPENDENCY) $(CXXFLAGS)
+	$(eval CCL = $(CXX))
 endif
 
 $(TMP_ROOT)/%.d: ;
@@ -455,7 +455,7 @@ vars:
 	@echo ""
 	@echo "CFLAGS: $(CFLAGS)"
 	@echo ""
-	@echo "CPPFLAGS: $(CPPFLAGS)"
+	@echo "CXXFLAGS: $(CXXFLAGS)"
 	@echo ""
 	@echo "LINKER_LIBS: $(LINKER_LIBS)"
 	@echo ""

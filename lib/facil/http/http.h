@@ -951,7 +951,11 @@ HTTP URL parsing
 
 /** the result returned by `http_url_parse` */
 typedef fio_url_s http_url_s
-    __attribute__((deprecated("use fio_url_s instead")));
+    __attribute__((deprecated
+#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
+	("use fio_url_s instead")
+#endif
+	));
 
 /**
  * Parses the URI returning it's components and their lengths (no decoding

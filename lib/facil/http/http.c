@@ -10,6 +10,7 @@ Feel free to copy, use and enjoy according to the license provided.
 #include <http1.h>
 #include <http_internal.h>
 
+#include <sys/param.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -17,6 +18,11 @@ Feel free to copy, use and enjoy according to the license provided.
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#if defined __GLIBC__ || defined BSD || defined __APPLE__
+#define HAVE_TM_TM_GMTOFF 1
+#define HAVE_TM_TM_ZONE 1
+#endif
 
 /* *****************************************************************************
 SSL/TLS patch
@@ -2073,8 +2079,12 @@ struct tm *http_gmtime(time_t timer, struct tm *tmbuf) {
   if (timer < 0)
     return gmtime_r(&timer, tmbuf);
   ssize_t a, b;
+#ifdef HAVE_TM_TM_GMTOFF
   tmbuf->tm_gmtoff = 0;
+#endif
+#ifdef HAVE_TM_TM_ZONE
   tmbuf->tm_zone = "UTC";
+#endif
   tmbuf->tm_isdst = 0;
   tmbuf->tm_year = 70; // tm_year == The number of years since 1900
   tmbuf->tm_mon = 0;
