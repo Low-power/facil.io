@@ -5,19 +5,19 @@ License: MIT
 #ifndef H_FIOBJ_H
 #define H_FIOBJ_H
 
-#include <fiobj_ary.h>
-#include <fiobj_data.h>
-#include <fiobj_hash.h>
-#include <fiobj_json.h>
-#include <fiobj_mustache.h>
-#include <fiobj_numbers.h>
-#include <fiobj_str.h>
-#include <fiobject.h>
+#include <fiobj/fiobj_ary.h>
+#include <fiobj/fiobj_data.h>
+#include <fiobj/fiobj_hash.h>
+#include <fiobj/fiobj_json.h>
+#include <fiobj/fiobj_mustache.h>
+#include <fiobj/fiobj_numbers.h>
+#include <fiobj/fiobj_str.h>
+#include <fiobj/fiobject.h>
 
-#include <fio_siphash.h>
+#include <fiobj/fio_siphash.h>
 
 #ifdef H_FACIL_IO_H
-#include <fiobj4fio.h>
+#include <fiobj/fiobj4fio.h>
 #endif
 
 #if DEBUG

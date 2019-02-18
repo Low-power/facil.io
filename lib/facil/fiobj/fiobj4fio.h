@@ -5,7 +5,7 @@
  */
 
 #include <fio.h>
-#include <fiobj.h>
+#include <fiobj/fiobj.h>
 
 static void fiobj4sock_dealloc(void *o) { fiobj_free((FIOBJ)o); }
 

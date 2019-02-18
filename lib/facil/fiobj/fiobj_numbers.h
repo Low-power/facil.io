@@ -5,7 +5,7 @@ Copyright: Boaz Segev, 2017-2019
 License: MIT
 */
 
-#include <fiobject.h>
+#include <fiobj/fiobject.h>
 
 #ifdef __cplusplus
 extern "C" {

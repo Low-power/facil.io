@@ -291,11 +291,13 @@ print_help:
 
     ++pos;
   }
+/*
   fprintf(stderr, "\nUse any of the following input formats:\n"
                   "\t-arg <value>\t-arg=<value>\t-arg<value>\n"
                   "\n"
                   "Use the -h, -help or -? to get this information again.\n"
                   "\n");
+*/
   fio_cli_end();
   exit(0);
 }

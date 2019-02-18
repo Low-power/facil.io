@@ -9,7 +9,7 @@ A dynamic Array type for the fiobj_s dynamic type system.
 */
 #define FIOBJ_ARRAY_H
 
-#include <fiobject.h>
+#include <fiobj/fiobject.h>
 
 #ifdef __cplusplus
 extern "C" {

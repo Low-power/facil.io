@@ -9,7 +9,7 @@ Feel free to copy, use and enjoy according to the license provided.
 
 #include <fio.h>
 
-#include <fiobj.h>
+#include <fiobj/fiobj.h>
 
 #include <time.h>
 
@@ -591,7 +591,7 @@ int websocket_connect(const char *url, websocket_settings_s settings);
 #define websocket_connect(url, ...)                                            \
   websocket_connect((url), (websocket_settings_s){__VA_ARGS__})
 
-#include <websockets.h>
+#include <http/websockets.h>
 
 /* *****************************************************************************
 EventSource Support (SSE)

@@ -16,10 +16,10 @@ License: MIT
  */
 #define H_FIOBJ_HASH_H
 
-#include <fiobject.h>
+#include <fiobj/fiobject.h>
 
-#include <fio_siphash.h>
-#include <fiobj_str.h>
+#include <fiobj/fio_siphash.h>
+#include <fiobj/fiobj_str.h>
 
 #include <errno.h>
 

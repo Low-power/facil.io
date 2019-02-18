@@ -2445,36 +2445,41 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
     // perror("addr err");
     return -1;
   }
-  // get the file descriptor
-  int fd =
-      socket(addrinfo->ai_family, addrinfo->ai_socktype, addrinfo->ai_protocol);
-  if (fd <= 0) {
-    freeaddrinfo(addrinfo);
-    return -1;
-  }
-  // make sure the socket is non-blocking
-  if (fio_set_non_block(fd) < 0) {
-    freeaddrinfo(addrinfo);
-    close(fd);
-    return -1;
-  }
+  int fd = -1;
   if (server) {
-    {
-      // avoid the "address taken"
-      int optval = 1;
-      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    }
     // bind the address to the socket
     int bound = 0;
     for (struct addrinfo *i = addrinfo; i != NULL; i = i->ai_next) {
-      if (!bind(fd, i->ai_addr, i->ai_addrlen))
+	fprintf(stderr, "fio_tcp_socket: ai_family = %d, ai_socktype = %d, ai_protocol = %d, ai_addrlen = %u\n", i->ai_family, i->ai_socktype, i->ai_protocol, (unsigned int)i->ai_addrlen);
+	if(i->ai_family == AF_INET) {
+		fprintf(stderr, "fio_tcp_socket: %s\n", inet_ntoa(((struct sockaddr_in *)i->ai_addr)->sin_addr));
+		if(i->ai_protocol == IPPROTO_TCP) fprintf(stderr, "fio_tcp_socket: port = %u\n", (unsigned int)ntohs(((struct sockaddr_in *)i->ai_addr)->sin_port));
+	}
+      fd = socket(i->ai_family, i->ai_socktype, i->ai_protocol);
+      if(fd == -1) continue;
+      if (bind(fd, i->ai_addr, i->ai_addrlen) == 0) {
         bound = 1;
+      } else {
+        perror("bind");
+        close(fd);
+      }
     }
     if (!bound) {
       // perror("bind err");
       freeaddrinfo(addrinfo);
       close(fd);
       return -1;
+    }
+    // make sure the socket is non-blocking
+    if (fio_set_non_block(fd) < 0) {
+      freeaddrinfo(addrinfo);
+      close(fd);
+      return -1;
+    }
+    {
+      // avoid the "address taken"
+      int optval = 1;
+      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     }
 #ifdef TCP_FASTOPEN
     {
@@ -2490,6 +2495,19 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
       return -1;
     }
   } else {
+    for (struct addrinfo *i = addrinfo; fd == -1 && i != NULL; i = i->ai_next) {
+      fd = socket(i->ai_family, i->ai_socktype, i->ai_protocol);
+    }
+    if (fd == -1) {
+      freeaddrinfo(addrinfo);
+      return -1;
+    }
+    // make sure the socket is non-blocking
+    if (fio_set_non_block(fd) < 0) {
+      freeaddrinfo(addrinfo);
+      close(fd);
+      return -1;
+    }
     int one = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
     errno = 0;
@@ -7114,8 +7132,10 @@ static inline block_s *block_new(void) {
   }
   /* collect memory from the system */
   blk = sys_alloc(FIO_MEMORY_BLOCK_SIZE * FIO_MEMORY_BLOCKS_PER_ALLOCATION, 0);
-  if (!blk)
+  if (!blk) {
+    fio_unlock(&memory.lock);
     return NULL;
+  }
   FIO_LOG_DEBUG("memory allocator allocated %p from the system", (void *)blk);
   FIO_MEMORY_ON_BLOCK_ALLOC();
   block_init_root(blk, blk);

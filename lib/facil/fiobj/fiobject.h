@@ -25,7 +25,7 @@ types, abstracting some complexity and making dynamic type related tasks easier.
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <fio_siphash.h>
+#include <fiobj/fio_siphash.h>
 
 #include <fio.h>
 

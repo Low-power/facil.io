@@ -40,6 +40,8 @@ INCLUDE= ./
 # any preprocessosr defined flags we want, space seperated list (i.e. DEBUG )
 FLAGS:=
 
+LD_OPTION_SONAME:=-h
+
 ### Helpers
 # The library details for CMake incorporation. Can be safely removed.
 CMAKE_LIBFILE_NAME=CMakeLists.txt
@@ -220,7 +222,7 @@ build_objects: $(LIB_OBJS) $(MAIN_OBJS)
 lib: | create_tree lib_build
 
 lib_build: $(LIB_OBJS)
-	$(CCL) --shared $^ $(OPTIMIZATION) $(LINKER_FLAGS) -o $(DESTDIR)/libfacil.so.0.7
+	$(CCL) --shared $^ $(OPTIMIZATION) $(LINKER_FLAGS) -Wl,$(LD_OPTION_SONAME),libfacil.so.0.7 -o $(DESTDIR)/libfacil.so.0.7
 	ln -sf libfacil.so.0.7 $(DESTDIR)/libfacil.so
 	$(DOCUMENTATION)
 

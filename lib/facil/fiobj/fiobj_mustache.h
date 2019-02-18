@@ -5,9 +5,9 @@ License: MIT
 #ifndef H_FIOBJ_MUSTACHE_H
 #define H_FIOBJ_MUSTACHE_H
 
-#include <fiobject.h>
+#include <fiobj/fiobject.h>
 
-#include <mustache_parser.h>
+#include <fiobj/mustache_parser.h>
 
 /**
  * Loads a mustache template, converting it into an opaque instruction array.
