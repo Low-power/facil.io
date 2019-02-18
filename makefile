@@ -220,7 +220,8 @@ build_objects: $(LIB_OBJS) $(MAIN_OBJS)
 lib: | create_tree lib_build
 
 lib_build: $(LIB_OBJS)
-	$(CCL) -shared -o $(DESTDIR)/libfacil.so $^ $(OPTIMIZATION) $(LINKER_FLAGS)
+	$(CCL) --shared $^ $(OPTIMIZATION) $(LINKER_FLAGS) -o $(DESTDIR)/libfacil.so.0.7
+	ln -sf libfacil.so.0.7 $(DESTDIR)/libfacil.so
 	$(DOCUMENTATION)
 
 
@@ -262,8 +263,8 @@ $(TMP_ROOT)/%.d: ;
 .PHONY : test
 test: | clean
 	@DEBUG=1 $(MAKE) test_build_and_run
-	-@rm $(BIN) 2> /dev/null
-	-@rm -R $(TMP_ROOT) 2> /dev/null
+	-rm -f $(BIN) 2> /dev/null
+	-rm -fr $(TMP_ROOT) 2> /dev/null
 
 .PHONY : test/speed
 test/speed: | test_add_speed_flags $(LIB_OBJS)
@@ -313,9 +314,9 @@ test/build: $(LIB_OBJS)
 
 .PHONY : clean
 clean:
-	-@rm -f $(BIN) 2> /dev/null || echo "" >> /dev/null
-	-@rm -R -f $(TMP_ROOT) 2> /dev/null || echo "" >> /dev/null
-	-@mkdir -p $(BUILDTREE)
+	rm -f $(BIN) 2> /dev/null || echo "" >> /dev/null
+	rm -R -f $(TMP_ROOT) 2> /dev/null || echo "" >> /dev/null
+	-mkdir -p $(BUILDTREE)
 
 .PHONY : run
 run: | build
@@ -344,13 +345,13 @@ add/bearssl: | remove/bearssl
 	@mkdir lib/bearssl
 	-@find tmp/bearssl/src -name "*.*" -exec mv "{}" lib/bearssl \;
 	-@find tmp/bearssl/inc -name "*.*" -exec mv "{}" lib/bearssl \;
-	-@make clean
+	-@$(MAKE) clean
 
 .PHONY : remove/bearssl
 remove/bearssl:
 	-@echo "* Removing existing BearSSL source files."
 	-@rm -R -f lib/bearssl 2> /dev/null || echo "" >> /dev/null
-	-@make clean
+	-@$(MAKE) clean
 
 
 ########
