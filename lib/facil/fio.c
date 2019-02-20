@@ -2457,6 +2457,9 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
 	}
       fd = socket(i->ai_family, i->ai_socktype, i->ai_protocol);
       if(fd == -1) continue;
+      // avoid the "address taken"
+      int optval = 1;
+      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
       if (bind(fd, i->ai_addr, i->ai_addrlen) == 0) {
         bound = 1;
       } else {
@@ -2475,11 +2478,6 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
       freeaddrinfo(addrinfo);
       close(fd);
       return -1;
-    }
-    {
-      // avoid the "address taken"
-      int optval = 1;
-      setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     }
 #ifdef TCP_FASTOPEN
     {
