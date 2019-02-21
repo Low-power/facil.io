@@ -14,7 +14,6 @@ Feel free to copy, use and enjoy according to the license provided.
 #define FIO_INCLUDE_LINKED_LIST
 #include <fio.h>
 
-#include <sys/param.h>
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
@@ -40,7 +39,8 @@ Feel free to copy, use and enjoy according to the license provided.
 #if !FIO_ENGINE_POLL && !FIO_ENGINE_EPOLL && !FIO_ENGINE_KQUEUE
 #if defined(__linux__)
 #define FIO_ENGINE_EPOLL 1
-#elif defined(__APPLE__) || defined(BSD)
+#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__NetBSD__) ||     \
+    defined(__OpenBSD__) || defined(__bsdi__) || defined(__DragonFly__)
 #define FIO_ENGINE_KQUEUE 1
 #else
 #define FIO_ENGINE_POLL 1
@@ -1346,6 +1346,15 @@ Section Start Marker
 
 volatile uint8_t fio_signal_children_flag = 0;
 
+/* store old signal handlers to propegate signal handling */
+static struct sigaction fio_old_sig_chld;
+static struct sigaction fio_old_sig_pipe;
+static struct sigaction fio_old_sig_term;
+static struct sigaction fio_old_sig_int;
+#if !FIO_DISABLE_HOT_RESTART
+static struct sigaction fio_old_sig_usr1;
+#endif
+
 /*
  * Zombie Reaping
  * With thanks to Dr Graham D Shaw.
@@ -1357,15 +1366,20 @@ static void reap_child_handler(int sig) {
   while (waitpid(-1, NULL, WNOHANG) > 0)
     ;
   errno = old_errno;
+  if (fio_old_sig_chld.sa_handler != SIG_IGN &&
+      fio_old_sig_chld.sa_handler != SIG_DFL)
+    fio_old_sig_chld.sa_handler(sig);
 }
 
 /* initializes zombie reaping for the process */
 void fio_reap_children(void) {
   struct sigaction sa;
+  if (fio_old_sig_chld.sa_handler)
+    return;
   sa.sa_handler = reap_child_handler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-  if (sigaction(SIGCHLD, &sa, 0) == -1) {
+  if (sigaction(SIGCHLD, &sa, &fio_old_sig_chld) == -1) {
     perror("Child reaping initialization failed");
     kill(0, SIGINT);
     exit(errno);
@@ -1374,66 +1388,87 @@ void fio_reap_children(void) {
 
 /* handles the SIGUSR1, SIGINT and SIGTERM signals. */
 static void sig_int_handler(int sig) {
+  struct sigaction *old = NULL;
   switch (sig) {
 #if !FIO_DISABLE_HOT_RESTART
   case SIGUSR1:
     fio_signal_children_flag = 1;
+    old = &fio_old_sig_usr1;
     break;
 #endif
-  case SIGINT:  /* fallthrough */
+  case SIGINT: /* fallthrough */
+    if (!old)
+      old = &fio_old_sig_int;
   case SIGTERM: /* fallthrough */
+    if (!old)
+      old = &fio_old_sig_term;
     fio_stop();
     break;
+  case SIGPIPE: /* fallthrough */
+    if (!old)
+      old = &fio_old_sig_pipe;
   default:
     break;
   }
+  /* propagate signale handling to previous existing handler (if any) */
+  if (old->sa_handler != SIG_IGN && old->sa_handler != SIG_DFL)
+    old->sa_handler(sig);
 }
 
 /* setup handling for the SIGUSR1, SIGPIPE, SIGINT and SIGTERM signals. */
 static void fio_signal_handler_setup(void) {
   /* setup signal handling */
-  struct sigaction act, old;
-  memset(&act, 0, sizeof(old));
-  memset(&old, 0, sizeof(old));
+  struct sigaction act;
+  if (fio_old_sig_int.sa_handler)
+    return;
+
+  memset(&act, 0, sizeof(act));
 
   act.sa_handler = sig_int_handler;
   sigemptyset(&act.sa_mask);
   act.sa_flags = SA_RESTART | SA_NOCLDSTOP;
 
-  if (sigaction(SIGINT, &act, &old)) {
+  if (sigaction(SIGINT, &act, &fio_old_sig_int)) {
     perror("couldn't set signal handler");
     return;
   };
 
-  if (sigaction(SIGTERM, &act, &old)) {
+  if (sigaction(SIGTERM, &act, &fio_old_sig_term)) {
     perror("couldn't set signal handler");
     return;
   };
 #if !FIO_DISABLE_HOT_RESTART
-  if (sigaction(SIGUSR1, &act, &old)) {
+  if (sigaction(SIGUSR1, &act, &fio_old_sig_usr1)) {
     perror("couldn't set signal handler");
     return;
   };
 #endif
 
   act.sa_handler = SIG_IGN;
-  if (sigaction(SIGPIPE, &act, &old)) {
+  if (sigaction(SIGPIPE, &act, &fio_old_sig_pipe)) {
     perror("couldn't set signal handler");
     return;
   };
 }
-static void fio_signal_handler_reset(void) {
-  struct sigaction act, old;
-  memset(&act, 0, sizeof(old));
+
+void fio_signal_handler_reset(void) {
+  struct sigaction old;
+  if (!fio_old_sig_int.sa_handler)
+    return;
   memset(&old, 0, sizeof(old));
-  act.sa_handler = SIG_DFL;
-  sigemptyset(&act.sa_mask);
-  sigaction(SIGINT, &act, &old);
-  sigaction(SIGTERM, &act, &old);
+  sigaction(SIGINT, &fio_old_sig_int, &old);
+  sigaction(SIGTERM, &fio_old_sig_term, &old);
+  sigaction(SIGPIPE, &fio_old_sig_pipe, &old);
+  if (fio_old_sig_chld.sa_handler)
+    sigaction(SIGCHLD, &fio_old_sig_chld, &old);
 #if !FIO_DISABLE_HOT_RESTART
-  sigaction(SIGUSR1, &act, &old);
+  sigaction(SIGUSR1, &fio_old_sig_usr1, &old);
+  memset(&fio_old_sig_usr1, 0, sizeof(fio_old_sig_usr1));
 #endif
-  sigaction(SIGPIPE, &act, &old);
+  memset(&fio_old_sig_int, 0, sizeof(fio_old_sig_int));
+  memset(&fio_old_sig_term, 0, sizeof(fio_old_sig_term));
+  memset(&fio_old_sig_pipe, 0, sizeof(fio_old_sig_pipe));
+  memset(&fio_old_sig_chld, 0, sizeof(fio_old_sig_chld));
 }
 
 /**
@@ -3562,23 +3597,23 @@ static void __attribute__((constructor)) fio_lib_init(void) {
     fio_pubsub_initialize();
 #if DEBUG
 #if FIO_ENGINE_POLL
-    FIO_LOG_STATE("facil.io " FIO_VERSION_STRING " capacity initialization:\n"
-                  "*    Meximum open files %zu out of %zu\n"
-                  "*    Allocating %zu bytes for state handling.\n"
-                  "*    %zu bytes per connection + %zu for state handling.",
-                  capa, (size_t)rlim.rlim_max,
-                  (sizeof(*fio_data) + (capa * (sizeof(*fio_data->poll))) +
-                   (capa * (sizeof(*fio_data->info)))),
-                  (sizeof(*fio_data->poll) + sizeof(*fio_data->info)),
-                  sizeof(*fio_data));
+    FIO_LOG_INFO("facil.io " FIO_VERSION_STRING " capacity initialization:\n"
+                 "*    Meximum open files %zu out of %zu\n"
+                 "*    Allocating %zu bytes for state handling.\n"
+                 "*    %zu bytes per connection + %zu for state handling.",
+                 capa, (size_t)rlim.rlim_max,
+                 (sizeof(*fio_data) + (capa * (sizeof(*fio_data->poll))) +
+                  (capa * (sizeof(*fio_data->info)))),
+                 (sizeof(*fio_data->poll) + sizeof(*fio_data->info)),
+                 sizeof(*fio_data));
 #else
-    FIO_LOG_STATE("facil.io " FIO_VERSION_STRING " capacity initialization:\n"
-                  "*    Meximum open files %zu out of %zu\n"
-                  "*    Allocating %zu bytes for state handling.\n"
-                  "*    %zu bytes per connection + %zu for state handling.",
-                  capa, (size_t)rlim.rlim_max,
-                  (sizeof(*fio_data) + (capa * (sizeof(*fio_data->info)))),
-                  (sizeof(*fio_data->info)), sizeof(*fio_data));
+    FIO_LOG_INFO("facil.io " FIO_VERSION_STRING " capacity initialization:\n"
+                 "*    Meximum open files %zu out of %zu\n"
+                 "*    Allocating %zu bytes for state handling.\n"
+                 "*    %zu bytes per connection + %zu for state handling.",
+                 capa, (size_t)rlim.rlim_max,
+                 (sizeof(*fio_data) + (capa * (sizeof(*fio_data->info)))),
+                 (sizeof(*fio_data->info)), sizeof(*fio_data));
 #endif
 #endif
   }

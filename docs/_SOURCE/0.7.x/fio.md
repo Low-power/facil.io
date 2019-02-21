@@ -630,6 +630,18 @@ void fio_reap_children(void);
 Initializes zombie reaping for the process. Call before `fio_start` to enable
 global zombie reaping.
 
+#### `fio_signal_handler_reset`
+
+```c
+void fio_signal_handler_reset(void);
+```
+
+Resets any existing signal handlers, restoring their state to before they were set by facil.io.
+
+This stops both child reaping (`fio_reap_children`) and the default facil.io signal handlers (i.e., CTRL-C).
+
+This function will be called automatically by facil.io whenever facil.io stops.
+
 #### `fio_last_tick`
 
 ```c
@@ -4090,9 +4102,15 @@ To be more accurate, this number represents the highest `fd` value allowed by li
 
 If the soft coded OS limit is higher than this number, than this limit will be enforced instead.
 
-#### `FIO_ENGINE_POLL`
+#### `FIO_ENGINE_POLL`, `FIO_ENGINE_EPOLL`, `FIO_ENGINE_KQUEUE`
 
-If set, facil.io will prefer the `poll` system call over `epoll` or `kqueue`.
+If set, facil.io will prefer the specified polling system call (`poll`, `epoll` or `kqueue`) rather then attempting to auto-detect the correct system call.
+
+To set any of these flag while using the facil.io `makefile`, set the `FIO_FORCE_POLL` / `FIO_FORCE_EPOLL` / `FIO_FORCE_KQUEUE` environment variable to true. i.e.:
+
+```bash
+FIO_FORCE_POLL=1 make
+```
 
 It should be noted that for most use-cases, `epoll` and `kqueue` will perform better.
 
@@ -4114,12 +4132,6 @@ Otherwise threads are assumed to be intended for "fallback" in case of slow user
 
 By default, `FIO_DEFER_THROTTLE_PROGRESSIVE` is true (1).
 
-#### `FIO_PRINT_STATE`
-
-When this macro is true (1), facil.io will enable the `FIO_LOG_STATE(msg, ...)` macro to print some default information level messages to stderr (startup / shutdown messages, etc').
-
-By default this macro is set to true.
-
 #### `FIO_POLL_MAX_EVENTS`
 
 This macro sets the maximum number of IO events facil.io will pre-schedule at the beginning of each cycle, when using `epoll` or `kqueue` (not when using `poll`).
@@ -4134,11 +4146,11 @@ This macro can be used to disable the priority queue given to outbound IO.
 
 #### `FIO_PUBSUB_SUPPORT`
 
-If true (1), compiles the facil.io pub/sub API .
+If true (1), compiles the facil.io pub/sub API. By default, this is true.
 
 ## Weak functions
 
-Weak functions are functions that can be over-ridden during the compilation / linking stage.
+Weak functions are functions that can be overridden during the compilation / linking stage.
 
 This provides control over some operations such as thread creation and process forking, which could be important when integrating facil.io into a VM engine such as Ruby or JavaScript.
 
