@@ -244,9 +244,9 @@ else ifdef FIO_FORCE_EPOLL
 else ifdef FIO_FORCE_KQUEUE
   $(info * Skipping polling tests, enforcing manual selection of: kqueue)
 	FLAGS:=$(FLAGS) FIO_ENGINE_KQUEUE
-else ifdef FIO_POLL
-  $(info * Skipping kqueue and epoll tests, forcing polling with poll)
-	FLAGS:=$(FLAGS) FIO_ENGINE_POLL=$(FIO_POLL)
+else ifdef FIO_FORCE_POLL
+  $(info * Skipping polling tests, forcing polling with poll)
+	FLAGS:=$(FLAGS) FIO_ENGINE_POLL
 else ifeq ($(call TRY_COMPILE, $(FIO_POLL_TEST_EPOLL), $(EMPTY)), 0)
   $(info * Detected `epoll`)
 	FLAGS:=$(FLAGS) FIO_ENGINE_EPOLL
@@ -586,6 +586,9 @@ create_tree:
 #############################################################################
 # Tasks - Installers
 #############################################################################
+
+.PHONY : install/bearssl
+install/bearssl: | remove/bearssl add/bearssl ;
 
 .PHONY : add/bearssl
 add/bearssl: | remove/bearssl
