@@ -3932,8 +3932,7 @@ void fio_start FIO_IGNORE_MACRO(struct fio_start_args args) {
       "Server is running %u %s X %u %s with facil.io " FIO_VERSION_STRING
       " (%s)\n"
       "* Detected capacity: %d open file limit\n"
-      "* Root pid: %d\n"
-      "* Press ^C to stop\n",
+      "* Root pid: %d\n",
       fio_data->workers, fio_data->workers > 1 ? "workers" : "worker",
       fio_data->threads, fio_data->threads > 1 ? "threads" : "thread",
       fio_engine(), fio_data->capa, (int)fio_data->parent);
