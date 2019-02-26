@@ -7,6 +7,12 @@ Feel free to copy, use and enjoy according to the license provided.
 */
 #define H_HTTP_H
 
+#ifdef __GNUC__
+#if __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 5)
+#define deprecated(reason) deprecated
+#endif
+#endif
+
 #include <fio.h>
 
 #include <fiobj/fiobj.h>
@@ -951,11 +957,7 @@ HTTP URL parsing
 
 /** the result returned by `http_url_parse` */
 typedef fio_url_s http_url_s
-    __attribute__((deprecated
-#if __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
-	("use fio_url_s instead")
-#endif
-	));
+    __attribute__((deprecated("use fio_url_s instead")));
 
 /**
  * Parses the URI returning it's components and their lengths (no decoding
