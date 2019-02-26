@@ -2474,6 +2474,7 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
     // perror("addr err");
     return -1;
   }
+  int e = 0;
   int fd = -1;
   if (server) {
     // bind the address to the socket
@@ -2492,6 +2493,7 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
       if (bind(fd, i->ai_addr, i->ai_addrlen) == 0) {
         bound = 1;
       } else {
+        e = errno;
         perror("bind");
         close(fd);
       }
@@ -2500,6 +2502,7 @@ static intptr_t fio_tcp_socket(const char *address, const char *port,
       // perror("bind err");
       freeaddrinfo(addrinfo);
       close(fd);
+      errno = e;
       return -1;
     }
     // make sure the socket is non-blocking
