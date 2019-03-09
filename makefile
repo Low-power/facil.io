@@ -70,7 +70,7 @@ INCLUDE= ./
 # any preprocessosr defined flags we want, space seperated list (i.e. DEBUG )
 FLAGS:=
 
-LD_OPTION_SONAME:=-h
+LD_OPTION_SONAME?=-h
 
 # c compiler
 #ifndef CC

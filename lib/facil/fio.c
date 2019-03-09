@@ -2796,7 +2796,9 @@ retry_int:
     errno = old_errno;
     return 0;
   }
+  old_errno = errno;
   fio_force_close(uuid);
+  errno = old_errno;
   return -1;
 }
 
